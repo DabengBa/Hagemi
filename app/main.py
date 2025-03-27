@@ -47,10 +47,10 @@ sys.excepthook = handle_exception
 app = FastAPI()
 
 PASSWORD = os.environ.get("PASSWORD", "123")
+SECOND_MODEL = os.environ.get("SECOND_MODEL", "gemini-2.0-flash")
 MAX_REQUESTS_PER_MINUTE = int(os.environ.get("MAX_REQUESTS_PER_MINUTE", "30"))
 MAX_REQUESTS_PER_DAY_PER_IP = int(
     os.environ.get("MAX_REQUESTS_PER_DAY_PER_IP", "600"))
-# MAX_RETRIES = int(os.environ.get('MaxRetries', '3').strip() or '3')
 RETRY_DELAY = 1
 MAX_RETRY_DELAY = 16
 safety_settings = [
@@ -145,8 +145,6 @@ async def startup_event():
         logger.info(log_msg)
         if key_manager.api_keys:
             all_models = await GeminiClient.list_available_models(key_manager.api_keys[0])
-            GeminiClient.AVAILABLE_MODELS = [model.replace(
-                "models/", "") for model in all_models]
             log_msg = format_log_message('INFO', "Available models loaded.")
             logger.info(log_msg)
 
@@ -173,13 +171,6 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
     global current_api_key
     protect_from_abuse(
         http_request, MAX_REQUESTS_PER_MINUTE, MAX_REQUESTS_PER_DAY_PER_IP)
-    if chat_request.model not in GeminiClient.AVAILABLE_MODELS:
-        error_msg = "无效的模型"
-        extra_log = {'request_type': request_type, 'model': chat_request.model, 'status_code': 400, 'error_message': error_msg}
-        log_msg = format_log_message('ERROR', error_msg, extra=extra_log)
-        logger.error(log_msg)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     key_manager.reset_tried_keys_for_request() # 在每次请求处理开始时重置 tried_keys 集合
 
@@ -271,6 +262,14 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
                             extra_log_empty_response = {'key': current_api_key[:8], 'request_type': request_type, 'model': chat_request.model, 'status_code': 204}
                             log_msg = format_log_message('INFO', "Gemini API 返回空响应", extra=extra_log_empty_response)
                             logger.info(log_msg)
+                            
+                            # 如果当前不是SECOND_MODEL，则切换到SECOND_MODEL重试
+                            if chat_request.model != SECOND_MODEL:
+                                log_msg = format_log_message('INFO', f"尝试切换到备用模型 {SECOND_MODEL}", extra={'key': current_api_key[:8], 'request_type': request_type, 'model': SECOND_MODEL, 'status_code': 'N/A'})
+                                logger.info(log_msg)
+                                chat_request.model = SECOND_MODEL
+                                continue
+                            
                             # 继续循环
                             continue
                         response = ChatCompletionResponse(id="chatcmpl-someid", object="chat.completion", created=1234567890, model=chat_request.model,

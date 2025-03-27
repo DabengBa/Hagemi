@@ -109,7 +109,7 @@ class GeminiClient:
 
     async def stream_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction):
         logger.info("流式开始 →")
-        api_version = "v1alpha" if "think" in request.model else "v1beta"
+        api_version = "v1alpha"
         url = f"https://generativelanguage.googleapis.com/{api_version}/models/{request.model}:streamGenerateContent?key={self.api_key}&alt=sse"
         headers = {
             "Content-Type": "application/json",
@@ -174,7 +174,7 @@ class GeminiClient:
 
 
     def complete_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction):
-        api_version = "v1alpha" if "think" in request.model else "v1beta"
+        api_version = "v1alpha"
         url = f"https://generativelanguage.googleapis.com/{api_version}/models/{request.model}:generateContent?key={self.api_key}"
         headers = {
             "Content-Type": "application/json",
