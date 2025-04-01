@@ -1,12 +1,12 @@
-import requests
-import json
 import os
 import asyncio
-from app.models import ChatCompletionRequest, Message  # 相对导入
-from dataclasses import dataclass
-from typing import Optional, Dict, Any, List
 import httpx
 import logging
+import json
+from dataclasses import dataclass
+from typing import Optional, Dict, Any, List
+from app.models import ChatCompletionRequest, Message
+from app.utils import format_log_message
 
 logger = logging.getLogger('my_logger')
 
@@ -108,7 +108,8 @@ class GeminiClient:
         self.api_key = api_key
 
     async def stream_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction):
-        logger.info("流式开始 →")
+        log_msg = format_log_message('INFO', "流式开始", extra={'request_type': 'stream', 'model': request.model})
+        logger.info(log_msg)
         api_version = "v1alpha"
         url = f"https://generativelanguage.googleapis.com/{api_version}/models/{request.model}:streamGenerateContent?key={self.api_key}&alt=sse"
         headers = {
@@ -170,7 +171,8 @@ class GeminiClient:
                     # logger.error(f"流式处理错误: {e}")
                     raise e
                 finally:
-                    logger.info("流式结束 ←")
+                    log_msg = format_log_message('INFO', "流式结束", extra={'request_type': 'stream', 'model': request.model})
+        logger.info(log_msg)
 
 
     def complete_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction):
@@ -267,12 +269,12 @@ class GeminiClient:
 
     @staticmethod
     async def list_available_models(api_key) -> list:
-        url = "https://generativelanguage.googleapis.com/v1beta/models?key={}".format(
+        url = "https://generativelanguage.googleapis.com/v1alpha/models?key={}".format(
             api_key)
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             response.raise_for_status()
             data = response.json()
-            models = [model["name"] for model in data.get("models", [])]
+            models = [model["name"].replace("models/", "") for model in data.get("models", [])]
             models.extend(GeminiClient.EXTRA_MODELS)
             return models

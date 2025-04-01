@@ -2,7 +2,7 @@ import random
 from fastapi import HTTPException, Request
 import time
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 import os
 import requests
@@ -26,15 +26,16 @@ logger.addHandler(handler)
 
 def format_log_message(level, message, extra=None):
     extra = extra or {}
+    beijing_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
     log_values = {
-        'asctime': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'asctime': beijing_time,
         'levelname': level,
         'key': extra.get('key', 'N/A'),
         'request_type': extra.get('request_type', 'N/A'),
         'model': extra.get('model', 'N/A'),
         'status_code': extra.get('status_code', 'N/A'),
         'error_message': extra.get('error_message', ''),
-        'message': message
+        'message': f"[{beijing_time}] {message}"
     }
     log_format = LOG_FORMAT_DEBUG if DEBUG else LOG_FORMAT_NORMAL
     return log_format % log_values
@@ -114,29 +115,29 @@ def handle_gemini_error(error, current_api_key, key_manager) -> str:
                 if 'error' in error_data:
                     if error_data['error'].get('code') == "invalid_argument":
                         error_message = "无效的 API 密钥"
-                        extra_log_invalid_key = {'key': current_api_key[:8], 'status_code': status_code, 'error_message': error_message}
-                        log_msg = format_log_message('ERROR', f"{current_api_key[:8]} ... {current_api_key[-3:]} → 无效，可能已过期或被删除", extra=extra_log_invalid_key)
+                        extra_log_invalid_key = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
+                        log_msg = format_log_message('ERROR', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 无效，可能已过期或被删除", extra=extra_log_invalid_key)
                         logger.error(log_msg)
                         # key_manager.blacklist_key(current_api_key)
                         
                         return error_message
                     error_message = error_data['error'].get(
                         'message', 'Bad Request')
-                    extra_log_400 = {'key': current_api_key[:8], 'status_code': status_code, 'error_message': error_message}
+                    extra_log_400 = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
                     log_msg = format_log_message('WARNING', f"400 错误请求: {error_message}", extra=extra_log_400)
                     logger.warning(log_msg)
                     return f"400 错误请求: {error_message}"
             except ValueError:
                 error_message = "400 错误请求：响应不是有效的JSON格式"
-                extra_log_400_json = {'key': current_api_key[:8], 'status_code': status_code, 'error_message': error_message}
+                extra_log_400_json = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
                 log_msg = format_log_message('WARNING', error_message, extra=extra_log_400_json)
                 logger.warning(log_msg)
                 return error_message
 
         elif status_code == 429:
             error_message = "API 密钥配额已用尽或其他原因"
-            extra_log_429 = {'key': current_api_key[:8], 'status_code': status_code, 'error_message': error_message}
-            log_msg = format_log_message('WARNING', f"{current_api_key[:8]} ... {current_api_key[-3:]} → 429 官方资源耗尽或其他原因", extra=extra_log_429)
+            extra_log_429 = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
+            log_msg = format_log_message('WARNING', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 429 官方资源耗尽或其他原因", extra=extra_log_429)
             logger.warning(log_msg)
             # key_manager.blacklist_key(current_api_key)
              
@@ -144,31 +145,31 @@ def handle_gemini_error(error, current_api_key, key_manager) -> str:
 
         elif status_code == 403:
             error_message = "权限被拒绝"
-            extra_log_403 = {'key': current_api_key[:8], 'status_code': status_code, 'error_message': error_message}
-            log_msg = format_log_message('ERROR', f"{current_api_key[:8]} ... {current_api_key[-3:]} → 403 权限被拒绝", extra=extra_log_403)
+            extra_log_403 = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
+            log_msg = format_log_message('ERROR', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 403 权限被拒绝", extra=extra_log_403)
             logger.error(log_msg)
             # key_manager.blacklist_key(current_api_key)
             
             return error_message
         elif status_code == 500:
             error_message = "服务器内部错误"
-            extra_log_500 = {'key': current_api_key[:8], 'status_code': status_code, 'error_message': error_message}
-            log_msg = format_log_message('WARNING', f"{current_api_key[:8]} ... {current_api_key[-3:]} → 500 服务器内部错误", extra=extra_log_500)
+            extra_log_500 = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
+            log_msg = format_log_message('WARNING', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 500 服务器内部错误", extra=extra_log_500)
             logger.warning(log_msg)
             
             return "Gemini API 内部错误"
 
         elif status_code == 503:
             error_message = "服务不可用"
-            extra_log_503 = {'key': current_api_key[:8], 'status_code': status_code, 'error_message': error_message}
-            log_msg = format_log_message('WARNING', f"{current_api_key[:8]} ... {current_api_key[-3:]} → 503 服务不可用", extra=extra_log_503)
+            extra_log_503 = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
+            log_msg = format_log_message('WARNING', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 503 服务不可用", extra=extra_log_503)
             logger.warning(log_msg)
             
             return "Gemini API 服务不可用"
         else:
             error_message = f"未知错误: {status_code}"
-            extra_log_other = {'key': current_api_key[:8], 'status_code': status_code, 'error_message': error_message}
-            log_msg = format_log_message('WARNING', f"{current_api_key[:8]} ... {current_api_key[-3:]} → {status_code} 未知错误", extra=extra_log_other)
+            extra_log_other = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
+            log_msg = format_log_message('WARNING', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → {status_code} 未知错误", extra=extra_log_other)
             logger.warning(log_msg)
             
             return f"未知错误/模型不可用: {status_code}"
@@ -196,7 +197,7 @@ async def test_api_key(api_key: str) -> bool:
     测试 API 密钥是否有效。
     """
     try:
-        url = "https://generativelanguage.googleapis.com/v1beta/models?key={}".format(api_key)
+        url = "https://generativelanguage.googleapis.com/v1alpha/models?key={}".format(api_key)
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             response.raise_for_status()

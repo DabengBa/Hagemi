@@ -4,3 +4,4 @@ httpx
 python-dotenv
 requests
 apscheduler
+pydantic>=2.0
