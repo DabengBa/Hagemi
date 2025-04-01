@@ -3,6 +3,7 @@ import asyncio
 import httpx
 import logging
 import json
+import requests
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 from app.models import ChatCompletionRequest, Message
