@@ -45,8 +45,12 @@ class APIKeyManager:
     def __init__(self):
         self.api_keys = re.findall(
             r"AIzaSy[a-zA-Z0-9_-]{33}", os.environ.get('GEMINI_API_KEYS', ""))
-        self.key_stack = [] # 初始化密钥栈
-        self._reset_key_stack() # 初始化时创建随机密钥栈
+        self.key_stack = []
+        self.key_error_times = {}  # 新增：存储每个key的429错误时间
+        self._reset_key_stack()
+        self.scheduler = BackgroundScheduler()
+        self.scheduler.start()
+        self.tried_keys_for_request = set()
         # self.api_key_blacklist = set()
         # self.api_key_blacklist_duration = 60
         self.scheduler = BackgroundScheduler()
@@ -54,8 +58,14 @@ class APIKeyManager:
         self.tried_keys_for_request = set()  # 用于跟踪当前请求尝试中已试过的 key
 
     def _reset_key_stack(self):
-        """创建并随机化密钥栈"""
-        shuffled_keys = self.api_keys[:]  # 创建 api_keys 的副本以避免直接修改原列表
+        """创建并随机化密钥栈，过滤掉4小时内发生过429错误的key"""
+        now = time.time()
+        valid_keys = [
+            key for key in self.api_keys
+            if (key not in self.key_error_times) or
+            (now - self.key_error_times[key] >= 4 * 3600)
+        ]
+        shuffled_keys = valid_keys[:]
         random.shuffle(shuffled_keys)
         self.key_stack = shuffled_keys
 
@@ -105,6 +115,10 @@ class APIKeyManager:
         """在新的请求尝试时重置已尝试的 key 集合"""
         self.tried_keys_for_request = set()
 
+    def record_key_error(self, key):
+        """记录key发生429错误的时间"""
+        self.key_error_times[key] = time.time()
+
 
 def handle_gemini_error(error, current_api_key, key_manager) -> str:
     if isinstance(error, requests.exceptions.HTTPError):
@@ -135,12 +149,11 @@ def handle_gemini_error(error, current_api_key, key_manager) -> str:
                 return error_message
 
         elif status_code == 429:
+            key_manager.record_key_error(current_api_key)
             error_message = "API 密钥配额已用尽或其他原因"
             extra_log_429 = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
             log_msg = format_log_message('WARNING', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 429 官方资源耗尽或其他原因", extra=extra_log_429)
             logger.warning(log_msg)
-            # key_manager.blacklist_key(current_api_key)
-             
             return error_message
 
         elif status_code == 403:

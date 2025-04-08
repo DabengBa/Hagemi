@@ -128,7 +128,7 @@ class GeminiClient:
             data["system_instruction"] = system_instruction
         
         async with httpx.AsyncClient() as client:
-            async with client.stream("POST", url, headers=headers, json=data, timeout=600) as response:
+            async with client.stream("POST", url, headers=headers, json=data, timeout=300) as response:
                 buffer = b""
                 try:
                     async for line in response.aiter_lines():

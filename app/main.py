@@ -364,8 +364,14 @@ async def root():
         <div class="info-box">
             <h2>🟢 运行状态</h2>
             <p class="status">服务运行中</p>
-            <p>可用API密钥数量: {len(key_manager.api_keys)}</p>
+            <p>API密钥数量: {len(key_manager.api_keys)}</p>
             <p>可用模型数量: {len(GeminiClient.AVAILABLE_MODELS)}</p>
+            <div style='margin-top:15px;'>
+                <h3>API密钥状态：</h3>
+                <ul style='list-style:none; padding-left:0;'>
+                    {"".join([f'<li style="margin-bottom:8px;">🔑 ...{key[-6:]} | 最近429错误: {datetime.fromtimestamp(key_manager.key_error_times[key]).strftime("%Y-%m-%d %H:%M") if key in key_manager.key_error_times else "无错误记录"}</li>' for key in key_manager.api_keys])}
+                </ul>
+            </div>
         </div>
 
         <div class="info-box">
