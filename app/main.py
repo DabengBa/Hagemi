@@ -9,7 +9,7 @@ import asyncio
 from typing import Literal
 import random
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 import sys
 import logging
@@ -369,7 +369,7 @@ async def root():
             <div style='margin-top:15px;'>
                 <h3>API密钥状态：</h3>
                 <ul style='list-style:none; padding-left:0;'>
-                    {"".join([f'<li style="margin-bottom:8px;">🔑 ...{key[-6:]} | 最近429错误: {datetime.fromtimestamp(key_manager.key_error_times[key]).strftime("%Y-%m-%d %H:%M") if key in key_manager.key_error_times else "无错误记录"}</li>' for key in key_manager.api_keys])}
+                    {"".join([f'<li style="margin-bottom:8px;">🔑 ...{key[-6:]} | 最近429错误: {datetime.fromtimestamp(key_manager.key_error_times[key]).astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S") if key in key_manager.key_error_times else "无错误记录"}</li>' for key in key_manager.api_keys])}
                 </ul>
             </div>
         </div>
