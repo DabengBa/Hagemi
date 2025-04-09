@@ -225,41 +225,15 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
                         logger.info(log_msg)
                         raise
 
-                async def check_client_disconnect():
-                    while True:
-                        if await http_request.is_disconnected():
-                            extra_log_client_disconnect = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'error_message': '检测到客户端断开连接'}
-                            log_msg = format_log_message('INFO', "客户端连接已中断，正在取消API请求", extra=extra_log_client_disconnect)
-                            logger.info(log_msg)
-                            return True
-                        await asyncio.sleep(0.5)
-
                 gemini_task = asyncio.create_task(run_gemini_completion())
-                disconnect_task = asyncio.create_task(check_client_disconnect())
 
                 try:
                     done, pending = await asyncio.wait(
-                        [gemini_task, disconnect_task],
+                        [gemini_task],
                         return_when=asyncio.FIRST_COMPLETED
                     )
 
-                    if disconnect_task in done:
-                        gemini_task.cancel()
-                        try:
-                            await gemini_task
-                        except asyncio.CancelledError:
-                            extra_log_gemini_task_cancel = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'error_message': 'API任务已终止'}
-                            log_msg = format_log_message('INFO', "API任务已成功取消", extra=extra_log_gemini_task_cancel)
-                            logger.info(log_msg)
-                        # 直接抛出异常中断循环
-                        raise HTTPException(status_code=status.HTTP_408_REQUEST_TIMEOUT, detail="客户端连接已中断")
-
                     if gemini_task in done:
-                        disconnect_task.cancel()
-                        try:
-                            await disconnect_task
-                        except asyncio.CancelledError:
-                            pass
                         response_content = gemini_task.result()
                         if response_content.text == "":
                             extra_log_empty_response = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'status_code': 204}
@@ -280,6 +254,19 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
                         extra_log_success = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'status_code': 200}
                         log_msg = format_log_message('INFO', "请求处理成功", extra=extra_log_success)
                         logger.info(log_msg)
+                        if await http_request.is_disconnected():
+                            extra_log_client_disconnect = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'error_message': '检测到客户端断开连接'}
+                            log_msg = format_log_message('INFO', "客户端连接已中断", extra=extra_log_client_disconnect)
+                            logger.info(log_msg)
+                            if response_content.text:
+                                extra_log_response = {
+                                    'key': current_api_key[-6:],
+                                    'request_type': request_type,
+                                    'model': chat_request.model,
+                                    'response_content': response_content.text
+                                }
+                                log_msg = format_log_message('INFO', f"获取到响应内容: {extra_log_response['response_content']}", extra=extra_log_response)
+                                logger.info(log_msg)
                         return response
 
                 except asyncio.CancelledError:
