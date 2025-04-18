@@ -52,8 +52,7 @@ MAX_RETRY = int(os.environ.get("MAX_RETRY", "3"))  # 默认3次重试
 MAX_REQUESTS_PER_MINUTE = int(os.environ.get("MAX_REQUESTS_PER_MINUTE", "4"))
 MAX_REQUESTS_PER_DAY_PER_IP = int(
     os.environ.get("MAX_REQUESTS_PER_DAY_PER_IP", "200"))
-RETRY_DELAY = 1
-MAX_RETRY_DELAY = 16
+RETRY_DELAY = 3
 safety_settings = [
     {
         "category": "HARM_CATEGORY_HARASSMENT",
@@ -98,6 +97,16 @@ safety_settings_g2 = [
         "threshold": 'OFF'
     }
 ]
+GOOGLE_SEARCH_MODELS = {
+    "gemini-2.0-flash-exp",
+    "gemini-2.0-flash",
+    "gemini-2.5-pro-preview-03-25",
+    "gemini-2.5-pro-exp-03-25",
+}
+
+THINKING_BUDGET_MODELS = {
+    "gemini-2.5-flash-preview-04-17",
+}
 
 key_manager = APIKeyManager() # 实例化 APIKeyManager，栈会在 __init__ 中初始化
 current_api_key = key_manager.get_available_key()
@@ -322,6 +331,7 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
                     log_msg_version_switch = format_log_message('WARNING', f"遇到 500 错误，尝试切换到 API 版本 v1beta 进行重试 (Key: ...{current_api_key[-6:]})", extra={'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'status_code': 500, 'error_message': 'Switching to v1beta'})
                     logger.warning(log_msg_version_switch)
                     switch_key_occurred = False # Ensure we don't switch key on next loop iteration
+                    await asyncio.sleep(RETRY_DELAY) # 添加重试延迟
                     continue # Retry with the same key but v1beta
                 else:
                     # Last attempt failed even after trying v1alpha
@@ -334,6 +344,7 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
                 # api_version_to_use is reset at the start of the loop when key is switched
                 continue
             
+                await asyncio.sleep(RETRY_DELAY) # 添加重试延迟
             # If it's the last attempt and it failed, let it fall through
 
     msg = "所有API密钥均失败,请稍后重试"

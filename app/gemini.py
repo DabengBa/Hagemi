@@ -121,9 +121,29 @@ class GeminiClient:
             "generationConfig": {
                 "temperature": request.temperature,
                 "maxOutputTokens": request.max_tokens,
+                "thinkingConfig": {
+                    "thinking_budget": request.thinking_budget
+                }
             },
             "safetySettings": safety_settings,
         }
+        # Validate and adjust thinking_budget within generationConfig
+        budget = request.thinking_budget
+        if budget is not None:
+            if budget < 0:
+                budget = 0
+            elif 0 < budget <= 1024:
+                budget = 1024
+            elif budget > 24576:
+                budget = 24576
+            # Update the nested thinking_budget
+            if "generationConfig" in data and "thinkingConfig" in data["generationConfig"]:
+                data["generationConfig"]["thinkingConfig"]["thinking_budget"] = budget
+        else:
+            # If budget is None, remove thinkingConfig from generationConfig if it exists
+            if "generationConfig" in data and "thinkingConfig" in data["generationConfig"]:
+                 del data["generationConfig"]["thinkingConfig"]
+
         if system_instruction:
             data["system_instruction"] = system_instruction
         
@@ -174,6 +194,23 @@ class GeminiClient:
                 finally:
                     log_msg = format_log_message('INFO', "流式结束", extra={'request_type': 'stream', 'model': request.model})
         logger.info(log_msg)
+        # Validate and adjust thinking_budget within generationConfig
+        budget = request.thinking_budget
+        if budget is not None:
+            if budget < 0:
+                budget = 0
+            elif 0 < budget <= 1024:
+                budget = 1024
+            elif budget > 24576:
+                budget = 24576
+            # Update the nested thinking_budget
+            if "generationConfig" in data and "thinkingConfig" in data["generationConfig"]:
+                data["generationConfig"]["thinkingConfig"]["thinking_budget"] = budget
+        else:
+            # If budget is None, remove thinkingConfig from generationConfig if it exists
+            if "generationConfig" in data and "thinkingConfig" in data["generationConfig"]:
+                 del data["generationConfig"]["thinkingConfig"]
+
 
 
     def complete_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction, api_version: str = "v1alpha"):
@@ -189,6 +226,9 @@ class GeminiClient:
             "generationConfig": {
                 "temperature": request.temperature,
                 "maxOutputTokens": request.max_tokens,
+                "thinkingConfig": {  # Move thinking config inside generationConfig
+                    "thinking_budget": request.thinking_budget
+                }
             },
             "safetySettings": safety_settings,
         }

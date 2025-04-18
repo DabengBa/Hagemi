@@ -16,6 +16,7 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: Optional[int] = None
     presence_penalty: Optional[float] = 0.0
     frequency_penalty: Optional[float] = 0.0
+    thinking_budget: Optional[int] = 4096
 
 class Choice(BaseModel):
     index: int
