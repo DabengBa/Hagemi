@@ -170,7 +170,8 @@ def handle_gemini_error(error, current_api_key, key_manager) -> str:
             log_msg = format_log_message('WARNING', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 500 服务器内部错误", extra=extra_log_500)
             logger.warning(log_msg)
             
-            return "Gemini API 内部错误"
+            # Return a specific identifier for 500 errors to trigger API version switch
+            return "GEMINI_500_ERROR"
 
         elif status_code == 503:
             error_message = "服务不可用"

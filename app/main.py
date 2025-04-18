@@ -181,17 +181,22 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
         GeminiClient, chat_request.messages)
 
     retry_attempts = min(MAX_RETRY, len(key_manager.api_keys)) if key_manager.api_keys else 1 # 重试次数等于密钥数量和MAX_RETRY之中最小值，至少尝试 1 次
+    api_version_to_use = "v1alpha" # Start with v1alpha
+
     for attempt in range(1, retry_attempts + 1):
-        if attempt == 1:
-            current_api_key = key_manager.get_available_key() # 每次循环开始都获取新的 key, 栈逻辑在 get_available_key 中处理
-        
+        # Get a key only if it's the first attempt or after a key switch (not after version switch)
+        if attempt == 1 or 'switch_key_occurred' in locals() and switch_key_occurred:
+             current_api_key = key_manager.get_available_key()
+             api_version_to_use = "v1alpha" # Reset to v1alpha when getting a new key
+             switch_key_occurred = False # Reset flag
+
         if current_api_key is None: # 检查是否获取到 API 密钥
             log_msg_no_key = format_log_message('WARNING', "没有可用的 API 密钥，跳过本次尝试", extra={'request_type': request_type, 'model': chat_request.model, 'status_code': 'N/A'})
             logger.warning(log_msg_no_key)
             break  # 如果没有可用密钥，跳出循环
 
-        extra_log = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'status_code': 'N/A', 'error_message': ''}
-        log_msg = format_log_message('INFO', f"第 {attempt}/{retry_attempts} 次尝试", extra=extra_log)
+        extra_log = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'status_code': 'N/A', 'error_message': '', 'api_version': api_version_to_use}
+        log_msg = format_log_message('INFO', f"第 {attempt}/{retry_attempts} 次尝试 (API Version: {api_version_to_use})", extra=extra_log)
         logger.info(log_msg)
 
         gemini_client = GeminiClient(current_api_key)
@@ -199,7 +204,7 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
             if chat_request.stream:
                 async def stream_generator():
                     try:
-                        async for chunk in gemini_client.stream_chat(chat_request, contents, safety_settings_g2 if 'gemini-2.0-flash-exp' in chat_request.model else safety_settings, system_instruction):
+                        async for chunk in gemini_client.stream_chat(chat_request, contents, safety_settings_g2 if 'gemini-2.0-flash-exp' in chat_request.model else safety_settings, system_instruction, api_version=api_version_to_use):
                             formatted_chunk = {"id": "chatcmpl-someid", "object": "chat.completion.chunk", "created": 1234567,
                                                "model": chat_request.model, "choices": [{"delta": {"role": "assistant", "content": chunk}, "index": 0, "finish_reason": None}]}
                             yield f"data: {json.dumps(formatted_chunk)}\n\n"
@@ -210,17 +215,20 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
                         log_msg = format_log_message('INFO', "客户端连接已中断", extra=extra_log_cancel)
                         logger.info(log_msg)
                     except Exception as e:
-                        error_detail = handle_gemini_error(
-                            e, current_api_key, key_manager)
-                        yield f"data: {json.dumps({'error': {'message': error_detail, 'type': 'gemini_error'}})}\n\n"
+                        # Handle error within the stream generator needs careful thought,
+                        # For now, let the outer exception handler catch it to trigger retry/version switch
+                        raise e
+                        # error_detail = handle_gemini_error(
+                        #     e, current_api_key, key_manager)
+                        # yield f"data: {json.dumps({'error': {'message': error_detail, 'type': 'gemini_error'}})}\n\n"
                 return StreamingResponse(stream_generator(), media_type="text/event-stream")
             else:
                 async def run_gemini_completion():
                     try:
-                        response_content = await asyncio.to_thread(gemini_client.complete_chat, chat_request, contents, safety_settings_g2 if 'gemini-2.0-flash-exp' in chat_request.model else safety_settings, system_instruction)
+                        response_content = await asyncio.to_thread(gemini_client.complete_chat, chat_request, contents, safety_settings_g2 if 'gemini-2.0-flash-exp' in chat_request.model else safety_settings, system_instruction, api_version=api_version_to_use)
                         return response_content
                     except asyncio.CancelledError:
-                        extra_log_gemini_cancel = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'error_message': '客户端断开导致API调用取消'}
+                        extra_log_gemini_cancel = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'error_message': '客户端断开导致API调用取消', 'api_version': api_version_to_use}
                         log_msg = format_log_message('INFO', "API调用因客户端断开而取消", extra=extra_log_gemini_cancel)
                         logger.info(log_msg)
                         raise
@@ -254,23 +262,43 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
                         extra_log_success = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'status_code': 200}
                         log_msg = format_log_message('INFO', "请求处理成功", extra=extra_log_success)
                         logger.info(log_msg)
-                        if await http_request.is_disconnected():
-                            extra_log_client_disconnect = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'error_message': '检测到客户端断开连接'}
-                            log_msg = format_log_message('INFO', "客户端连接已中断", extra=extra_log_client_disconnect)
+                        try:
+                            is_disconnected = await http_request.is_disconnected()
+                        except Exception as e_disconnect:
+                            # 记录 is_disconnected 调用本身的错误
+                            extra_log_disconnect_error = {'key': current_api_key[-6:] if current_api_key else 'N/A', 'request_type': request_type, 'model': chat_request.model, 'error_message': f"Error calling http_request.is_disconnected: {e_disconnect}"}
+                            log_msg_disconnect_error = format_log_message('ERROR', "调用 http_request.is_disconnected 时出错", extra=extra_log_disconnect_error)
+                            logger.error(log_msg_disconnect_error)
+                            # 假设未断开，让后续逻辑继续尝试返回数据
+                            is_disconnected = False
+
+                        if is_disconnected:
+                            extra_log_client_disconnect = {'key': current_api_key[-6:] if current_api_key else 'N/A', 'request_type': request_type, 'model': chat_request.model, 'error_message': '检测到客户端断开连接'}
+                            log_msg = format_log_message('INFO', "客户端连接已中断 (但仍尝试返回)", extra=extra_log_client_disconnect)
                             logger.info(log_msg)
                             if response_content.text:
                                 extra_log_response = {
-                                    'key': current_api_key[-6:],
+                                    'key': current_api_key[-6:] if current_api_key else 'N/A',
                                     'request_type': request_type,
                                     'model': chat_request.model,
                                     'response_content': response_content.text
                                 }
-                                log_msg = format_log_message('INFO', f"获取到响应内容: {extra_log_response['response_content']}", extra=extra_log_response)
+                                log_msg = format_log_message('INFO', f"获取到响应内容 (客户端已断开): {extra_log_response['response_content']}", extra=extra_log_response)
                                 logger.info(log_msg)
-                        return response
+                            # 注意：即使客户端断开，我们仍然尝试返回响应
+                            # 如果返回失败，FastAPI/Uvicorn 会处理底层的连接错误
+                        try:
+                            return response # 无论 is_disconnected 检查是否出错或结果如何，都尝试返回
+                        except Exception as e_return:
+                            # 记录在返回响应时发生的错误
+                            extra_log_return_error = {'key': current_api_key[-6:] if current_api_key else 'N/A', 'request_type': request_type, 'model': chat_request.model, 'error_message': f"Error during return response: {e_return}"}
+                            log_msg_return_error = format_log_message('ERROR', "返回响应时发生错误", extra=extra_log_return_error)
+                            logger.error(log_msg_return_error)
+                            # 重新抛出异常，让 FastAPI 或 ASGI 服务器处理，避免触发外层重试
+                            raise e_return
 
                 except asyncio.CancelledError:
-                    extra_log_request_cancel = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'error_message':"请求被取消" }
+                    extra_log_request_cancel = {'key': current_api_key[-6:] if current_api_key else 'N/A', 'request_type': request_type, 'model': chat_request.model, 'error_message':"请求被取消" }
                     log_msg = format_log_message('INFO', "请求取消", extra=extra_log_request_cancel)
                     logger.info(log_msg)
                     raise
@@ -285,10 +313,28 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
             else:
                 raise  
         except Exception as e:
-            handle_gemini_error(e, current_api_key, key_manager)
-            if attempt < retry_attempts: 
-                switch_api_key() 
+            error_type = handle_gemini_error(e, current_api_key, key_manager)
+            
+            # Check if it's a 500 error and we are using v1alpha
+            if error_type == "GEMINI_500_ERROR" and api_version_to_use == "v1alpha":
+                if attempt < retry_attempts:
+                    api_version_to_use = "v1beta"
+                    log_msg_version_switch = format_log_message('WARNING', f"遇到 500 错误，尝试切换到 API 版本 v1beta 进行重试 (Key: ...{current_api_key[-6:]})", extra={'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'status_code': 500, 'error_message': 'Switching to v1beta'})
+                    logger.warning(log_msg_version_switch)
+                    switch_key_occurred = False # Ensure we don't switch key on next loop iteration
+                    continue # Retry with the same key but v1beta
+                else:
+                    # Last attempt failed even after trying v1alpha
+                    pass # Let it fall through to the final error
+
+            # Handle other errors or 500 error when already using v1beta
+            elif attempt < retry_attempts:
+                switch_api_key()
+                switch_key_occurred = True # Flag that key was switched
+                # api_version_to_use is reset at the start of the loop when key is switched
                 continue
+            
+            # If it's the last attempt and it failed, let it fall through
 
     msg = "所有API密钥均失败,请稍后重试"
     extra_log_all_fail = {'key': "ALL", 'request_type': request_type, 'model': chat_request.model, 'status_code': 500, 'error_message': msg}

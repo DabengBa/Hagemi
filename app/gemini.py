@@ -108,10 +108,10 @@ class GeminiClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    async def stream_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction):
-        log_msg = format_log_message('INFO', "流式开始", extra={'request_type': 'stream', 'model': request.model})
+    async def stream_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction, api_version: str = "v1alpha"):
+        log_msg = format_log_message('INFO', f"流式开始 (API Version: {api_version})", extra={'request_type': 'stream', 'model': request.model, 'api_version': api_version})
         logger.info(log_msg)
-        api_version = "v1alpha"
+        # api_version = "v1alpha" # Removed, now passed as parameter
         url = f"https://generativelanguage.googleapis.com/{api_version}/models/{request.model}:streamGenerateContent?key={self.api_key}&alt=sse"
         headers = {
             "Content-Type": "application/json",
@@ -176,8 +176,10 @@ class GeminiClient:
         logger.info(log_msg)
 
 
-    def complete_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction):
-        api_version = "v1alpha"
+    def complete_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction, api_version: str = "v1alpha"):
+        log_msg = format_log_message('INFO', f"非流式请求开始 (API Version: {api_version})", extra={'request_type': 'non-stream', 'model': request.model, 'api_version': api_version})
+        logger.info(log_msg)
+        # api_version = "v1alpha" # Removed, now passed as parameter
         url = f"https://generativelanguage.googleapis.com/{api_version}/models/{request.model}:generateContent?key={self.api_key}"
         headers = {
             "Content-Type": "application/json",
