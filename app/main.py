@@ -108,8 +108,14 @@ THINKING_BUDGET_MODELS = {
     "gemini-2.5-flash-preview-04-17",
 }
 
+log_msg = format_log_message('INFO', "即将实例化 APIKeyManager")
+logger.info(log_msg)
 key_manager = APIKeyManager() # 实例化 APIKeyManager，栈会在 __init__ 中初始化
+log_msg = format_log_message('INFO', "APIKeyManager 实例化完成")
+logger.info(log_msg)
 current_api_key = key_manager.get_available_key()
+log_msg = format_log_message('INFO', "获取可用密钥完成")
+logger.info(log_msg)
 
 
 def switch_api_key():
@@ -191,6 +197,7 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
 
     retry_attempts = min(MAX_RETRY, len(key_manager.api_keys)) if key_manager.api_keys else 1 # 重试次数等于密钥数量和MAX_RETRY之中最小值，至少尝试 1 次
     api_version_to_use = "v1alpha" # Start with v1alpha
+    use_thinking_budget = chat_request.model in THINKING_BUDGET_MODELS
 
     for attempt in range(1, retry_attempts + 1):
         # Get a key only if it's the first attempt or after a key switch (not after version switch)
@@ -213,7 +220,7 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
             if chat_request.stream:
                 async def stream_generator():
                     try:
-                        async for chunk in gemini_client.stream_chat(chat_request, contents, safety_settings_g2 if 'gemini-2.0-flash-exp' in chat_request.model else safety_settings, system_instruction, api_version=api_version_to_use):
+                        async for chunk in gemini_client.stream_chat(chat_request, contents, safety_settings_g2 if 'gemini-2.0-flash-exp' in chat_request.model else safety_settings, system_instruction, api_version=api_version_to_use, use_thinking_budget=use_thinking_budget):
                             formatted_chunk = {"id": "chatcmpl-someid", "object": "chat.completion.chunk", "created": 1234567,
                                                "model": chat_request.model, "choices": [{"delta": {"role": "assistant", "content": chunk}, "index": 0, "finish_reason": None}]}
                             yield f"data: {json.dumps(formatted_chunk)}\n\n"
@@ -234,7 +241,7 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
             else:
                 async def run_gemini_completion():
                     try:
-                        response_content = await asyncio.to_thread(gemini_client.complete_chat, chat_request, contents, safety_settings_g2 if 'gemini-2.0-flash-exp' in chat_request.model else safety_settings, system_instruction, api_version=api_version_to_use)
+                        response_content = await asyncio.to_thread(gemini_client.complete_chat, chat_request, contents, safety_settings_g2 if 'gemini-2.0-flash-exp' in chat_request.model else safety_settings, system_instruction, api_version=api_version_to_use, use_thinking_budget=use_thinking_budget)
                         return response_content
                     except asyncio.CancelledError:
                         extra_log_gemini_cancel = {'key': current_api_key[-6:], 'request_type': request_type, 'model': chat_request.model, 'error_message': '客户端断开导致API调用取消', 'api_version': api_version_to_use}

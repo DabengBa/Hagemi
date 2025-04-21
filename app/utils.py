@@ -43,6 +43,8 @@ def format_log_message(level, message, extra=None):
 
 class APIKeyManager:
     def __init__(self):
+        log_msg = format_log_message('INFO', "APIKeyManager 初始化开始")
+        logger.info(log_msg)
         self.api_keys = re.findall(
             r"AIzaSy[a-zA-Z0-9_-]{33}", os.environ.get('GEMINI_API_KEYS', ""))
         self.key_stack = []
@@ -56,9 +58,13 @@ class APIKeyManager:
         self.scheduler = BackgroundScheduler()
         self.scheduler.start()
         self.tried_keys_for_request = set()  # 用于跟踪当前请求尝试中已试过的 key
+        log_msg = format_log_message('INFO', f"APIKeyManager 初始化完成，找到 {len(self.api_keys)} 个 API 密钥")
+        logger.info(log_msg)
 
     def _reset_key_stack(self):
         """创建并随机化密钥栈，过滤掉4小时内发生过429错误的key"""
+        log_msg = format_log_message('INFO', "重置密钥栈开始")
+        logger.info(log_msg)
         now = time.time()
         valid_keys = [
             key for key in self.api_keys
@@ -68,22 +74,34 @@ class APIKeyManager:
         shuffled_keys = valid_keys[:]
         random.shuffle(shuffled_keys)
         self.key_stack = shuffled_keys
+        log_msg = format_log_message('INFO', f"重置密钥栈完成，栈中包含 {len(self.key_stack)} 个有效密钥")
+        logger.info(log_msg)
 
 
     def get_available_key(self):
         """从栈顶获取密钥，栈空时重新生成 (修改后)"""
+        log_msg = format_log_message('INFO', "获取可用密钥开始")
+        logger.info(log_msg)
         while self.key_stack:
             key = self.key_stack.pop()
             # if key not in self.api_key_blacklist and key not in self.tried_keys_for_request:
             if key not in self.tried_keys_for_request:
                 self.tried_keys_for_request.add(key)
+                log_msg = format_log_message('INFO', f"获取到可用密钥: ...{key[-6:]}")
+                logger.info(log_msg)
+                log_msg = format_log_message('INFO', "获取可用密钥结束: 成功获取")
+                logger.info(log_msg)
                 return key
 
         if not self.api_keys:
             log_msg = format_log_message('ERROR', "没有配置任何 API 密钥！")
             logger.error(log_msg)
+            log_msg = format_log_message('INFO', "获取可用密钥结束: 没有配置密钥")
+            logger.info(log_msg)
             return None
 
+        log_msg = format_log_message('INFO', "密钥栈为空，重新生成密钥栈")
+        logger.info(log_msg)
         self._reset_key_stack() # 重新生成密钥栈
 
         # 再次尝试从新栈中获取密钥 (迭代一次)
@@ -92,8 +110,14 @@ class APIKeyManager:
             # if key not in self.api_key_blacklist and key not in self.tried_keys_for_request:
             if key not in self.tried_keys_for_request:
                 self.tried_keys_for_request.add(key)
+                log_msg = format_log_message('INFO', f"重新生成栈后获取到可用密钥: ...{key[-6:]}")
+                logger.info(log_msg)
+                log_msg = format_log_message('INFO', "获取可用密钥结束: 重新生成栈后成功获取")
+                logger.info(log_msg)
                 return key
 
+        log_msg = format_log_message('INFO', "获取可用密钥结束: 重新生成栈后仍未获取到密钥")
+        logger.info(log_msg)
         return None
 
 
