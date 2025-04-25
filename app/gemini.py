@@ -140,8 +140,15 @@ class GeminiClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
 
+<<<<<<< HEAD
     async def stream_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction, tools: Optional[List[Tool]] = None, tool_choice: Optional[Union[str, Dict[str, Any]]] = None, api_version: str = "v1alpha", use_thinking_budget: bool = False):
         logger.info(f"流式开始 (API Version: {api_version})", extra={'request_type': 'stream', 'model': request.model, 'api_version': api_version, 'key': self.api_key[-6:] if self.api_key else 'N/A', 'status_code': 'N/A', 'error_message': ''})
+=======
+    async def stream_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction, api_version: str = "v1alpha"):
+        log_msg = format_log_message('INFO', f"流式开始 (API Version: {api_version})", extra={'request_type': 'stream', 'model': request.model, 'api_version': api_version})
+        logger.info(log_msg)
+        # api_version = "v1alpha" # Removed, now passed as parameter
+>>>>>>> parent of f44bd50 (更新thinking模型list)
         url = f"https://generativelanguage.googleapis.com/{api_version}/models/{request.model}:streamGenerateContent?key={self.api_key}&alt=sse"
         headers = {
             "Content-Type": "application/json",
@@ -151,23 +158,27 @@ class GeminiClient:
             "generationConfig": {
                 "temperature": request.temperature,
                 "maxOutputTokens": request.max_tokens,
+                "thinkingConfig": {
+                    "thinking_budget": request.thinking_budget
+                }
             },
             "safetySettings": safety_settings,
         }
-        if use_thinking_budget:
-            data["generationConfig"]["thinkingConfig"] = {"thinking_budget": request.thinking_budget}
-            # Validate and adjust thinking_budget within generationConfig
-            budget = request.thinking_budget
-            if budget is not None:
-                if budget < 0:
-                    budget = 0
-                elif 0 < budget <= 1024:
-                    budget = 1024
-                elif budget > 24576:
-                    budget = 24576
+        # Validate and adjust thinking_budget within generationConfig
+        budget = request.thinking_budget
+        if budget is not None:
+            if budget < 0:
+                budget = 0
+            elif 0 < budget <= 1024:
+                budget = 1024
+            elif budget > 24576:
+                budget = 24576
+            # Update the nested thinking_budget
+            if "generationConfig" in data and "thinkingConfig" in data["generationConfig"]:
                 data["generationConfig"]["thinkingConfig"]["thinking_budget"] = budget
-            else:
-                 # If use_thinking_budget is True but request.thinking_budget is None, remove it
+        else:
+            # If budget is None, remove thinkingConfig from generationConfig if it exists
+            if "generationConfig" in data and "thinkingConfig" in data["generationConfig"]:
                  del data["generationConfig"]["thinkingConfig"]
 
         if system_instruction:
@@ -207,7 +218,7 @@ class GeminiClient:
                         if not line.strip():
                             continue
                         if line.startswith("data: "):
-                            line = line[len("data: "):]
+                            line = line[len("data: "):] 
                         buffer += line.encode('utf-8')
                         try:
                             # logger.debug(f"Raw Gemini Stream Data: {line}") # Debug raw data
@@ -290,12 +301,40 @@ class GeminiClient:
                     logger.error(f"流式处理错误: {e}", exc_info=True)
                     raise e # Ensure outer handler catches this
                 finally:
+<<<<<<< HEAD
                     logger.info("流式结束", extra={'request_type': 'stream', 'model': request.model, 'key': self.api_key[-6:] if self.api_key else 'N/A', 'status_code': 'N/A', 'error_message': ''})
 
 
  
     def complete_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction, tools: Optional[List[Tool]] = None, tool_choice: Optional[Union[str, Dict[str, Any]]] = None, api_version: str = "v1alpha", use_thinking_budget: bool = False):
         logger.info(f"非流式请求开始 (API Version: {api_version})", extra={'request_type': 'non-stream', 'model': request.model, 'api_version': api_version, 'key': self.api_key[-6:] if self.api_key else 'N/A', 'status_code': 'N/A', 'error_message': ''})
+=======
+                    log_msg = format_log_message('INFO', "流式结束", extra={'request_type': 'stream', 'model': request.model})
+        logger.info(log_msg)
+        # Validate and adjust thinking_budget within generationConfig
+        budget = request.thinking_budget
+        if budget is not None:
+            if budget < 0:
+                budget = 0
+            elif 0 < budget <= 1024:
+                budget = 1024
+            elif budget > 24576:
+                budget = 24576
+            # Update the nested thinking_budget
+            if "generationConfig" in data and "thinkingConfig" in data["generationConfig"]:
+                data["generationConfig"]["thinkingConfig"]["thinking_budget"] = budget
+        else:
+            # If budget is None, remove thinkingConfig from generationConfig if it exists
+            if "generationConfig" in data and "thinkingConfig" in data["generationConfig"]:
+                 del data["generationConfig"]["thinkingConfig"]
+
+
+
+    def complete_chat(self, request: ChatCompletionRequest, contents, safety_settings, system_instruction, api_version: str = "v1alpha"):
+        log_msg = format_log_message('INFO', f"非流式请求开始 (API Version: {api_version})", extra={'request_type': 'non-stream', 'model': request.model, 'api_version': api_version})
+        logger.info(log_msg)
+        # api_version = "v1alpha" # Removed, now passed as parameter
+>>>>>>> parent of f44bd50 (更新thinking模型list)
         url = f"https://generativelanguage.googleapis.com/{api_version}/models/{request.model}:generateContent?key={self.api_key}"
         headers = {
             "Content-Type": "application/json",
@@ -305,12 +344,12 @@ class GeminiClient:
             "generationConfig": {
                 "temperature": request.temperature,
                 "maxOutputTokens": request.max_tokens,
+                "thinkingConfig": {  # Move thinking config inside generationConfig
+                    "thinking_budget": request.thinking_budget
+                }
             },
             "safetySettings": safety_settings,
         }
-        if use_thinking_budget:
-             data["generationConfig"]["thinkingConfig"] = {"thinking_budget": request.thinking_budget}
-
         if system_instruction:
             data["system_instruction"] = system_instruction
 
