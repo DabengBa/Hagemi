@@ -28,10 +28,7 @@ logger.addHandler(handler)
 class APIKeyManager:
     def __init__(self):
 <<<<<<< HEAD
-<<<<<<< HEAD
         logger.info("APIKeyManager 初始化开始", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
-=======
->>>>>>> parent of f44bd50 (更新thinking模型list)
 =======
 >>>>>>> parent of f44bd50 (更新thinking模型list)
         self.api_keys = re.findall(
@@ -46,17 +43,11 @@ class APIKeyManager:
         # self.api_key_blacklist_duration = 60
         self.tried_keys_for_request = set()  # 用于跟踪当前请求尝试中已试过的 key
 <<<<<<< HEAD
-<<<<<<< HEAD
         logger.info(f"APIKeyManager 初始化完成，找到 {len(self.api_keys)} 个 API 密钥", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
 
     def _reset_key_stack(self):
         """创建并随机化密钥栈，过滤掉4小时内发生过429错误的key"""
         logger.info("重置密钥栈开始", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
-=======
-
-    def _reset_key_stack(self):
-        """创建并随机化密钥栈，过滤掉4小时内发生过429错误的key"""
->>>>>>> parent of f44bd50 (更新thinking模型list)
 =======
 
     def _reset_key_stack(self):
@@ -72,10 +63,7 @@ class APIKeyManager:
         random.shuffle(shuffled_keys)
         self.key_stack = shuffled_keys
 <<<<<<< HEAD
-<<<<<<< HEAD
         logger.info(f"重置密钥栈完成，栈中包含 {len(self.key_stack)} 个有效密钥", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
-=======
->>>>>>> parent of f44bd50 (更新thinking模型list)
 =======
 >>>>>>> parent of f44bd50 (更新thinking模型list)
 
@@ -83,10 +71,7 @@ class APIKeyManager:
     def get_available_key(self):
         """从栈顶获取密钥，栈空时重新生成 (修改后)"""
 <<<<<<< HEAD
-<<<<<<< HEAD
         logger.info("获取可用密钥开始", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
-=======
->>>>>>> parent of f44bd50 (更新thinking模型list)
 =======
 >>>>>>> parent of f44bd50 (更新thinking模型list)
         while self.key_stack:
@@ -94,7 +79,6 @@ class APIKeyManager:
             # if key not in self.api_key_blacklist and key not in self.tried_keys_for_request:
             if key not in self.tried_keys_for_request:
                 self.tried_keys_for_request.add(key)
-<<<<<<< HEAD
 <<<<<<< HEAD
                 logger.info(f"获取到可用密钥: ...{key[-6:]}", extra={'key': key[-6:], 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
                 logger.info("获取可用密钥结束: 成功获取", extra={'key': key[-6:], 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
@@ -107,8 +91,6 @@ class APIKeyManager:
 
         logger.info("密钥栈为空，重新生成密钥栈", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
 =======
-=======
->>>>>>> parent of f44bd50 (更新thinking模型list)
                 return key
 
         if not self.api_keys:
@@ -116,9 +98,6 @@ class APIKeyManager:
             logger.error(log_msg)
             return None
 
-<<<<<<< HEAD
->>>>>>> parent of f44bd50 (更新thinking模型list)
-=======
 >>>>>>> parent of f44bd50 (更新thinking模型list)
         self._reset_key_stack() # 重新生成密钥栈
 
@@ -129,16 +108,11 @@ class APIKeyManager:
             if key not in self.tried_keys_for_request:
                 self.tried_keys_for_request.add(key)
 <<<<<<< HEAD
-<<<<<<< HEAD
                 logger.info(f"重新生成栈后获取到可用密钥: ...{key[-6:]}", extra={'key': key[-6:], 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
                 logger.info("获取可用密钥结束: 重新生成栈后成功获取", extra={'key': key[-6:], 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
                 return key
 
         logger.info("获取可用密钥结束: 重新生成栈后仍未获取到密钥", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
-=======
-                return key
-
->>>>>>> parent of f44bd50 (更新thinking模型list)
 =======
                 return key
 

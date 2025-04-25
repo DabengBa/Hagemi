@@ -108,16 +108,11 @@ THINKING_BUDGET_MODELS = {
 }
 
 <<<<<<< HEAD
-<<<<<<< HEAD
 logger.info("即将实例化 APIKeyManager", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''})
 key_manager = APIKeyManager() # 实例化 APIKeyManager，栈会在 __init__ 中初始化
 logger.info("APIKeyManager 实例化完成", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''})
 current_api_key = key_manager.get_available_key()
 logger.info("获取可用密钥完成", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''})
-=======
-key_manager = APIKeyManager() # 实例化 APIKeyManager，栈会在 __init__ 中初始化
-current_api_key = key_manager.get_available_key()
->>>>>>> parent of f44bd50 (更新thinking模型list)
 =======
 key_manager = APIKeyManager() # 实例化 APIKeyManager，栈会在 __init__ 中初始化
 current_api_key = key_manager.get_available_key()
@@ -198,14 +193,10 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
 
     retry_attempts = min(MAX_RETRY, len(key_manager.api_keys)) if key_manager.api_keys else 1 # 重试次数等于密钥数量和MAX_RETRY之中最小值，至少尝试 1 次
 <<<<<<< HEAD
-<<<<<<< HEAD
     api_version_to_use = "v1beta" # Start with v1beta as it's generally more stable for tools
     use_thinking_budget = chat_request.model in THINKING_BUDGET_MODELS
     tools = chat_request.tools
     tool_choice = chat_request.tool_choice
-=======
-    api_version_to_use = "v1alpha" # Start with v1alpha
->>>>>>> parent of f44bd50 (更新thinking模型list)
 =======
     api_version_to_use = "v1alpha" # Start with v1alpha
 >>>>>>> parent of f44bd50 (更新thinking模型list)
@@ -230,7 +221,6 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
                 async def stream_generator():
                     chunk_id_counter = 0
                     try:
-<<<<<<< HEAD
 <<<<<<< HEAD
                         async for chunk_data in gemini_client.stream_chat(
                             chat_request, contents,
@@ -272,8 +262,6 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
 
                         # Send DONE message after the loop finishes successfully
 =======
-=======
->>>>>>> parent of f44bd50 (更新thinking模型list)
                         async for chunk in gemini_client.stream_chat(chat_request, contents, safety_settings_g2 if 'gemini-2.0-flash-exp' in chat_request.model else safety_settings, system_instruction, api_version=api_version_to_use):
                             formatted_chunk = {"id": "chatcmpl-someid", "object": "chat.completion.chunk", "created": 1234567,
                                                "model": chat_request.model, "choices": [{"delta": {"role": "assistant", "content": chunk}, "index": 0, "finish_reason": None}]}
@@ -296,7 +284,6 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
                 async def run_gemini_completion():
                     try:
 <<<<<<< HEAD
-<<<<<<< HEAD
                         # Pass tools and tool_choice to complete_chat
                         response_wrapper: ResponseWrapper = await asyncio.to_thread(
                             gemini_client.complete_chat,
@@ -310,8 +297,6 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
                         )
                         return response_wrapper
 =======
-=======
->>>>>>> parent of f44bd50 (更新thinking模型list)
                         response_content = await asyncio.to_thread(gemini_client.complete_chat, chat_request, contents, safety_settings_g2 if 'gemini-2.0-flash-exp' in chat_request.model else safety_settings, system_instruction, api_version=api_version_to_use)
                         return response_content
 >>>>>>> parent of f44bd50 (更新thinking模型list)
