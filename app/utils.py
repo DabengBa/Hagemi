@@ -9,25 +9,42 @@ import requests
 import httpx
 from threading import Lock
 import logging
+import sys
 
-# Unified Log Format
-LOG_FORMAT = '%(asctime)s - %(levelname)s - [%(key)s]-%(request_type)s-[%(model)s]-%(status_code)s: %(message)s - %(error_message)s'
+DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
+LOG_FORMAT_DEBUG = '%(asctime)s - %(levelname)s - [%(key)s]-%(request_type)s-[%(model)s]-%(status_code)s: %(message)s - %(error_message)s'
+LOG_FORMAT_NORMAL = '[%(key)s]-%(request_type)s-[%(model)s]-%(status_code)s: %(message)s'
 
 # 配置 logger
 logger = logging.getLogger("my_logger")
 logger.setLevel(logging.DEBUG)
 
 handler = logging.StreamHandler()
-formatter = logging.Formatter(LOG_FORMAT) # Use the new format
-handler.setFormatter(formatter)
-# Remove existing handlers to avoid duplicates if this code is re-run
-if logger.hasHandlers():
-    logger.handlers.clear()
+# formatter = logging.Formatter('%(message)s')
+# handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+def format_log_message(level, message, extra=None):
+    extra = extra or {}
+    beijing_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+    log_values = {
+        'asctime': beijing_time,
+        'levelname': level,
+        'key': extra.get('key', 'N/A'),
+        'request_type': extra.get('request_type', 'N/A'),
+        'model': extra.get('model', 'N/A'),
+        'status_code': extra.get('status_code', 'N/A'),
+        'error_message': extra.get('error_message', ''),
+        'message': f"[{beijing_time}] {message}"
+    }
+    log_format = LOG_FORMAT_DEBUG if DEBUG else LOG_FORMAT_NORMAL
+    return log_format % log_values
+
 
 class APIKeyManager:
     def __init__(self):
-        logger.info("APIKeyManager 初始化开始", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
+        log_msg = format_log_message('INFO', "APIKeyManager 初始化开始")
+        logger.info(log_msg)
         self.api_keys = re.findall(
             r"AIzaSy[a-zA-Z0-9_-]{33}", os.environ.get('GEMINI_API_KEYS', ""))
         self.key_stack = []
@@ -38,12 +55,16 @@ class APIKeyManager:
         self.tried_keys_for_request = set()
         # self.api_key_blacklist = set()
         # self.api_key_blacklist_duration = 60
+        self.scheduler = BackgroundScheduler()
+        self.scheduler.start()
         self.tried_keys_for_request = set()  # 用于跟踪当前请求尝试中已试过的 key
-        logger.info(f"APIKeyManager 初始化完成，找到 {len(self.api_keys)} 个 API 密钥", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
+        log_msg = format_log_message('INFO', f"APIKeyManager 初始化完成，找到 {len(self.api_keys)} 个 API 密钥")
+        logger.info(log_msg)
 
     def _reset_key_stack(self):
         """创建并随机化密钥栈，过滤掉4小时内发生过429错误的key"""
-        logger.info("重置密钥栈开始", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
+        log_msg = format_log_message('INFO', "重置密钥栈开始")
+        logger.info(log_msg)
         now = time.time()
         valid_keys = [
             key for key in self.api_keys
@@ -53,27 +74,34 @@ class APIKeyManager:
         shuffled_keys = valid_keys[:]
         random.shuffle(shuffled_keys)
         self.key_stack = shuffled_keys
-        logger.info(f"重置密钥栈完成，栈中包含 {len(self.key_stack)} 个有效密钥", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
+        log_msg = format_log_message('INFO', f"重置密钥栈完成，栈中包含 {len(self.key_stack)} 个有效密钥")
+        logger.info(log_msg)
 
 
     def get_available_key(self):
         """从栈顶获取密钥，栈空时重新生成 (修改后)"""
-        logger.info("获取可用密钥开始", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
+        log_msg = format_log_message('INFO', "获取可用密钥开始")
+        logger.info(log_msg)
         while self.key_stack:
             key = self.key_stack.pop()
             # if key not in self.api_key_blacklist and key not in self.tried_keys_for_request:
             if key not in self.tried_keys_for_request:
                 self.tried_keys_for_request.add(key)
-                logger.info(f"获取到可用密钥: ...{key[-6:]}", extra={'key': key[-6:], 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
-                logger.info("获取可用密钥结束: 成功获取", extra={'key': key[-6:], 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
+                log_msg = format_log_message('INFO', f"获取到可用密钥: ...{key[-6:]}")
+                logger.info(log_msg)
+                log_msg = format_log_message('INFO', "获取可用密钥结束: 成功获取")
+                logger.info(log_msg)
                 return key
 
         if not self.api_keys:
-            logger.error("没有配置任何 API 密钥！", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
-            logger.info("获取可用密钥结束: 没有配置密钥", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
+            log_msg = format_log_message('ERROR', "没有配置任何 API 密钥！")
+            logger.error(log_msg)
+            log_msg = format_log_message('INFO', "获取可用密钥结束: 没有配置密钥")
+            logger.info(log_msg)
             return None
 
-        logger.info("密钥栈为空，重新生成密钥栈", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
+        log_msg = format_log_message('INFO', "密钥栈为空，重新生成密钥栈")
+        logger.info(log_msg)
         self._reset_key_stack() # 重新生成密钥栈
 
         # 再次尝试从新栈中获取密钥 (迭代一次)
@@ -82,18 +110,23 @@ class APIKeyManager:
             # if key not in self.api_key_blacklist and key not in self.tried_keys_for_request:
             if key not in self.tried_keys_for_request:
                 self.tried_keys_for_request.add(key)
-                logger.info(f"重新生成栈后获取到可用密钥: ...{key[-6:]}", extra={'key': key[-6:], 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
-                logger.info("获取可用密钥结束: 重新生成栈后成功获取", extra={'key': key[-6:], 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
+                log_msg = format_log_message('INFO', f"重新生成栈后获取到可用密钥: ...{key[-6:]}")
+                logger.info(log_msg)
+                log_msg = format_log_message('INFO', "获取可用密钥结束: 重新生成栈后成功获取")
+                logger.info(log_msg)
                 return key
 
-        logger.info("获取可用密钥结束: 重新生成栈后仍未获取到密钥", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
+        log_msg = format_log_message('INFO', "获取可用密钥结束: 重新生成栈后仍未获取到密钥")
+        logger.info(log_msg)
         return None
 
 
     def show_all_keys(self):
-        logger.info(f"当前可用API key个数: {len(self.api_keys)} ", extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
+        log_msg = format_log_message('INFO', f"当前可用API key个数: {len(self.api_keys)} ")
+        logger.info(log_msg)
         for i, api_key in enumerate(self.api_keys):
-            logger.info(f"API Key{i}: {api_key[:8]}...{api_key[-3:]}", extra={'key': api_key[-6:], 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': ''}) # Modified
+            log_msg = format_log_message('INFO', f"API Key{i}: {api_key[:8]}...{api_key[-3:]}")
+            logger.info(log_msg)
 
     # def blacklist_key(self, key):
     #     log_msg = format_log_message('WARNING', f"{key[:8]} → 暂时禁用 {self.api_key_blacklist_duration} 秒")
@@ -121,68 +154,79 @@ def handle_gemini_error(error, current_api_key, key_manager) -> str:
                     if error_data['error'].get('code') == "invalid_argument":
                         error_message = "无效的 API 密钥"
                         extra_log_invalid_key = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
-                        logger.error("无效，可能已过期或被删除", extra=extra_log_invalid_key) # Modified
+                        log_msg = format_log_message('ERROR', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 无效，可能已过期或被删除", extra=extra_log_invalid_key)
+                        logger.error(log_msg)
                         # key_manager.blacklist_key(current_api_key)
-
+                        
                         return error_message
                     error_message = error_data['error'].get(
                         'message', 'Bad Request')
                     extra_log_400 = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
-                    logger.warning(f"400 错误请求: {error_message}", extra=extra_log_400) # Modified
+                    log_msg = format_log_message('WARNING', f"400 错误请求: {error_message}", extra=extra_log_400)
+                    logger.warning(log_msg)
                     return f"400 错误请求: {error_message}"
             except ValueError:
                 error_message = "400 错误请求：响应不是有效的JSON格式"
                 extra_log_400_json = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
-                logger.warning(error_message, extra=extra_log_400_json) # Modified
+                log_msg = format_log_message('WARNING', error_message, extra=extra_log_400_json)
+                logger.warning(log_msg)
                 return error_message
 
         elif status_code == 429:
             key_manager.record_key_error(current_api_key)
             error_message = "API 密钥配额已用尽或其他原因"
             extra_log_429 = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
-            logger.warning("429 官方资源耗尽或其他原因", extra=extra_log_429) # Modified
+            log_msg = format_log_message('WARNING', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 429 官方资源耗尽或其他原因", extra=extra_log_429)
+            logger.warning(log_msg)
             return error_message
 
         elif status_code == 403:
             error_message = "权限被拒绝"
             extra_log_403 = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
-            logger.error("403 权限被拒绝", extra=extra_log_403) # Modified
+            log_msg = format_log_message('ERROR', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 403 权限被拒绝", extra=extra_log_403)
+            logger.error(log_msg)
             # key_manager.blacklist_key(current_api_key)
-
+            
             return error_message
         elif status_code == 500:
             error_message = "服务器内部错误"
             extra_log_500 = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
-            logger.warning("500 服务器内部错误", extra=extra_log_500) # Modified
-
+            log_msg = format_log_message('WARNING', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 500 服务器内部错误", extra=extra_log_500)
+            logger.warning(log_msg)
+            
             # Return a specific identifier for 500 errors to trigger API version switch
             return "GEMINI_500_ERROR"
 
         elif status_code == 503:
             error_message = "服务不可用"
             extra_log_503 = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
-            logger.warning("503 服务不可用", extra=extra_log_503) # Modified
-
+            log_msg = format_log_message('WARNING', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 503 服务不可用", extra=extra_log_503)
+            logger.warning(log_msg)
+            
             return "Gemini API 服务不可用"
         else:
             error_message = f"未知错误: {status_code}"
             extra_log_other = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
-            logger.warning(f"{status_code} 未知错误", extra=extra_log_other) # Modified
-
+            log_msg = format_log_message('WARNING', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → {status_code} 未知错误", extra=extra_log_other)
+            logger.warning(log_msg)
+            
             return f"未知错误/模型不可用: {status_code}"
 
     elif isinstance(error, requests.exceptions.ConnectionError):
         error_message = "连接错误"
-        logger.warning(error_message, extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': error_message}) # Modified
+        log_msg = format_log_message('WARNING', error_message, extra={'error_message': error_message})
+        logger.warning(log_msg)
         return error_message
 
     elif isinstance(error, requests.exceptions.Timeout):
         error_message = "请求超时"
-        logger.warning(error_message, extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': error_message}) # Modified
+        log_msg = format_log_message('WARNING', error_message, extra={'error_message': error_message})
+        logger.warning(log_msg)
         return error_message
     else:
         error_message = f"发生未知错误: {error}"
-        logger.error(error_message, extra={'key': 'N/A', 'request_type': 'N/A', 'model': 'N/A', 'status_code': 'N/A', 'error_message': error_message}) # Modified
+        log_msg = format_log_message('ERROR', error_message, extra={'error_message': error_message})
+        logger.error(log_msg)
         return error_message
 
 
