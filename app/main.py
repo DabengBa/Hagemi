@@ -47,7 +47,6 @@ sys.excepthook = handle_exception
 app = FastAPI()
 
 PASSWORD = os.environ.get("PASSWORD", "123")
-SECOND_MODEL = os.environ.get("SECOND_MODEL", "gemini-2.0-flash")
 MAX_RETRY = int(os.environ.get("MAX_RETRY", "3"))  # 默认3次重试
 MAX_REQUESTS_PER_MINUTE = int(os.environ.get("MAX_REQUESTS_PER_MINUTE", "4"))
 MAX_REQUESTS_PER_DAY_PER_IP = int(
@@ -106,6 +105,9 @@ GOOGLE_SEARCH_MODELS = {
 
 THINKING_BUDGET_MODELS = {
     "gemini-2.5-flash-preview-04-17",
+    "gemini-2.5-flash-preview-05-20",
+    "gemini-2.5-flash-preview-04-17-thinking",
+    "gemini-2.5-flash-preview-05-20-thinking",
 }
 
 log_msg = format_log_message('INFO', "即将实例化 APIKeyManager")
@@ -264,13 +266,6 @@ async def process_request(chat_request: ChatCompletionRequest, http_request: Req
                             log_msg = format_log_message('INFO', "Gemini API 返回空响应", extra=extra_log_empty_response)
                             logger.info(log_msg)
                             
-                            # 如果当前不是SECOND_MODEL，则切换到SECOND_MODEL重试
-                            if chat_request.model != SECOND_MODEL:
-                                log_msg = format_log_message('INFO', f"尝试切换到备用模型 {SECOND_MODEL}", extra={'key': current_api_key[-6:], 'request_type': request_type, 'model': SECOND_MODEL, 'status_code': 'N/A'})
-                                logger.info(log_msg)
-                                chat_request.model = SECOND_MODEL
-                                continue
-                            
                             # 继续循环
                             continue
                         response = ChatCompletionResponse(id="chatcmpl-someid", object="chat.completion", created=1234567890, model=chat_request.model,
@@ -420,7 +415,17 @@ async def root():
             <div style='margin-top:15px;'>
                 <h3>API密钥状态：</h3>
                 <ul style='list-style:none; padding-left:0;'>
-                    {"".join([f'<li style="margin-bottom:8px;">🔑 ...{key[-6:]} | 最近429错误: {(datetime.fromtimestamp(error_time).astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S") if (error_time := key_manager.key_error_times.get(key)) else "无错误记录")}</li>' for key in key_manager.api_keys])}
+                    {"".join([
+                        (
+                            f'<li style="margin-bottom:8px;">🔑 ...{key[-6:]}'
+                            f' | 最近429错误: '
+                            f'{datetime.fromtimestamp(key_manager.key_error_times[key]).astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S") if key in key_manager.key_error_times else "无错误记录"}'
+                            f' | 最近403错误: '
+                            f'{datetime.fromtimestamp(key_manager.key_403_error_times[key]).astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S") if key in key_manager.key_403_error_times else "无错误记录"}'
+                            f'</li>'
+                        )
+                        for key in key_manager.api_keys
+                    ])}
                 </ul>
             </div>
         </div>

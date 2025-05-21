@@ -48,7 +48,8 @@ class APIKeyManager:
         self.api_keys = re.findall(
             r"AIzaSy[a-zA-Z0-9_-]{33}", os.environ.get('GEMINI_API_KEYS', ""))
         self.key_stack = []
-        self.key_error_times = {}  # 新增：存储每个key的429错误时间
+        self.key_error_times = {}  # 记录429错误时间
+        self.key_403_error_times = {}  # 新增：记录403错误时间
         self._reset_key_stack()
         self.scheduler = BackgroundScheduler()
         self.scheduler.start()
@@ -142,6 +143,10 @@ class APIKeyManager:
     def record_key_error(self, key):
         """记录key发生429错误的时间"""
         self.key_error_times[key] = time.time()
+    
+    def record_403_error(self, key):
+        """记录key发生403错误的时间"""
+        self.key_403_error_times[key] = time.time()
 
 
 def handle_gemini_error(error, current_api_key, key_manager) -> str:
@@ -181,6 +186,7 @@ def handle_gemini_error(error, current_api_key, key_manager) -> str:
             return error_message
 
         elif status_code == 403:
+            key_manager.record_403_error(current_api_key)
             error_message = "权限被拒绝"
             extra_log_403 = {'key': current_api_key[-6:], 'status_code': status_code, 'error_message': error_message}
             log_msg = format_log_message('ERROR', f"{current_api_key[-6:]} ... {current_api_key[-3:]} → 403 权限被拒绝", extra=extra_log_403)
